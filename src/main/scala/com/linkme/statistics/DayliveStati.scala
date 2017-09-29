@@ -5,12 +5,13 @@ import java.io.{DataOutput, IOException}
 import java.{io, lang}
 import java.util.regex.{Matcher, Pattern}
 
+import com.linkme.hdfs.utils.{LinkedmeHdfsUtils, RecordParseUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{IntWritable, LongWritable, Text}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.hadoop.mapreduce.{Job, Mapper, Reducer}
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit, MultipleInputs}
+import org.apache.hadoop.mapreduce.{InputSplit, Job, Mapper, Reducer}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
 import scala.collection.mutable.Set
 /**
@@ -20,33 +21,37 @@ class DayliveStati {
 }
 object  DayliveStati{
 
-  class DayMapper extends  Mapper[Object,Text,Text,DayUserPair]{
 
-    //val patter:Pattern=Pattern.compile("(\"identity_id\":)([0-9]{0,16}){1},")
-   // val  patter:Pattern=Pattern.compile("(open|install).*?(\"identity_id\":)([0-9]{0,16}){1},(.+?)")
-    //val  patterDay:Pattern=Pattern.compile("(^20.*?)(T.*?)(ip-.*?)")
-    //val patternLine:Pattern=Pattern.compile("(^20.*?)(T.*?)(ip-.*?)(open|install).*?(\"identity_id\":)([0-9]{0,16}){1},(.+?)")
-    val patternLine:Pattern=Pattern.compile("(open|install).*?(\"identity_id\":)([0-9]{0,16}){1},(.+?)")
+  class DayMapper extends  Mapper[LongWritable,Text,Text,DayUserPair]{
+
+
     val day=new Text()
     val user=new Text()
     val perLine=new LongWritable(1)
 
     @throws[IOException]
     @throws[InterruptedException]
-    override def map(key: Object, value: Text, context: Mapper[Object, Text, Text,DayUserPair]#Context): Unit = {
-      val  text=value.toString()
-      val matchs:Matcher=patternLine.matcher(text)
-      if (matchs.find()==true) {
+    override def map(key: LongWritable, value: Text, context: Mapper[LongWritable, Text, Text,DayUserPair]#Context): Unit = {
 
-        val dayStr = matchs.group(1)
-        val identityid = matchs.group(3)
-        day.set(dayStr)
-        user.set(identityid)
-        val dayUserPair=new DayUserPair(day,user,perLine)
-        context.write(day, dayUserPair)
-        }else{
-          return
-        }
+      if (value.toString==null){
+        return
+      }
+      val filepath:FileSplit=context.getInputSplit.asInstanceOf[FileSplit]
+      val  dayfile:String=filepath.getPath().toString
+      val dayStr = dayfile.substring(33,43)
+      println("begin map +"+dayStr)
+      day.set(dayStr)
+
+      val word= RecordParseUtils.getLinkPageAppOpsandIdentity(value.toString)
+      if (word(1)==null){
+        return
+      }
+      user.set(word(1))
+//      user.set(value.toString)
+      //println(word(1))
+      println(key.toString+value.toString)
+      val dayUserPair=new DayUserPair(day,user,perLine)
+      context.write(day, dayUserPair)
 
     }
   }
@@ -54,15 +59,13 @@ object  DayliveStati{
     @throws[IOException]
     @throws[InterruptedException]
     override def reduce(key: Text, values: lang.Iterable[DayUserPair], context: Reducer[Text, DayUserPair, Text, LongWritable]#Context): Unit = {
-      import collection.JavaConversions._
-
-     val daySet=Set()
-     val  daySets=daySet++values
-      val dayCount=daySets.size
-      //context.getCounter(IdentityEnum.normalIdentity).increment(1)
-     // sum.set(context.getCounter(IdentityEnum.normalIdentity).getValue)
-     val sum =new LongWritable()
-      sum.set(dayCount)
+      val daySet:Set[DayUserPair]=Set()
+      val iter=values.iterator()
+      while (iter.hasNext){
+        daySet.add(iter.next())
+      }
+      val dayCount=daySet.size
+     val sum =new LongWritable(dayCount)
       context.write(key,sum)
     }
   }
@@ -70,20 +73,33 @@ object  DayliveStati{
   def main(args: Array[String]): Unit = {
 
     val conf =new Configuration()
-    val job =new Job(conf,"DayliveStatistic")
+    //conf.setInt("mapreduce.input.lineinputformat.linespermap",15)
+
+    println("begin debug")
+    val job =new Job(conf,"toDayliveStatistic")
     job.setJarByClass(classOf[DayliveStati])
     job.setMapperClass(classOf[DayMapper])
-    job.setCombinerClass(classOf[DayReducer])
+
+    //job.setCombinerClass(classOf[DayReducer])
     job.setReducerClass(classOf[DayReducer])
+
     job.setMapOutputKeyClass(classOf[Text])
     job.setMapOutputValueClass(classOf[DayUserPair])
     job.setOutputKeyClass(classOf[Text])
-    job.setOutputValueClass(classOf[LongWritable])
+   // job.setOutputValueClass(classOf[DayUserPair])
+    job.setOutputValueClass(classOf[Text])
+   // job.setInputFormatClass(classOf[TomcatLogParserInputFormat])
+    //job.setOutputFormatClass(classOf[TextOutputFormat[Text,LongWritable]])
+
     FileInputFormat.addInputPath(job,new Path (args(0)))
     FileInputFormat.setInputDirRecursive(job,true)
+    LinkedmeHdfsUtils.checkOuputExist(conf,args(1))
     FileOutputFormat.setOutputPath(job,new Path(args(1)))
+    LinkedmeHdfsUtils.getSuccefulOutFile(conf,job,args(1))
     System.exit(if(job.waitForCompletion(true)) 1 else 0)
 
-
   }
+
+
+
 }
