@@ -9,8 +9,8 @@ RUN_SCRIPT=./src/main/resources/runday.sh
 
 sleep 1
 echo "wait for some minutes to upload file to aws "
-scp -i $AWS_PEM $LOCAL_JAR $RUN_SCRIPT  $AWS_SERVER:/hadoopJars/
-#scp -i $AWS_PEM  $RUN_SCRIPT  $AWS_SERVER:/hadoopJars/
+#scp -i $AWS_PEM $LOCAL_JAR $RUN_SCRIPT  $AWS_SERVER:/hadoopJars/
+scp -i $AWS_PEM  $RUN_SCRIPT  $AWS_SERVER:/hadoopJars/
 #sleep 2
 echo "grant right for the  hadoop script "
 ssh -i $AWS_PEM $AWS_SERVER  'sudo -i chmod 777 /hadoopJars/runday.sh'
