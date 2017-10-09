@@ -50,7 +50,7 @@ libraryDependencies ++= Seq(
 
 
 
-  // "or.apache.hadoop" % "adoop-mapreduce-client-jobclient" % "2.8.1"
+
 )
 
 

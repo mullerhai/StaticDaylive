@@ -17,4 +17,4 @@ ssh -i $AWS_PEM $AWS_SERVER  'sudo -i chmod 777 /hadoopJars/runday.sh'
 
 sleep 2
 echo "execute hadoop map reduce script"
-ssh -i $AWS_PEM $AWS_SERVER 'sudo -i /hadoopJars/runday.sh'
+ssh -i $AWS_PEM $AWS_SERVER 'sudo -i nohup sh /hadoopJars/runday.sh &'
